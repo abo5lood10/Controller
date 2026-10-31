@@ -145,9 +145,43 @@ namespace ControllerUnit
             Key(vk, 0, extended ? EXTENDED : 0); Key(vk, 0, (extended ? EXTENDED : 0) | KEYUP);
         }
         static bool IsExt(ushort v) { return (v >= 0x21 && v <= 0x28) || v == 0x2D || v == 0x2E; }
+        // Alt+Tab keeps Alt held, like a real keyboard, so the window switcher with the thumbnails stays open: every further press of
+        // the button moves to the next window (Alt+Shift+Tab: back), arrow keys / Enter sent meanwhile work inside the switcher, and
+        // four seconds after the last press Alt is let go, which picks the highlighted window.
+        const int AltHoldMs = 4000;
+        static bool altHeld;
+        static System.Threading.Timer altTimer;
+        static readonly object altLock = new object();
+
+        static void ArmAlt()
+        {
+            if (altTimer == null) altTimer = new System.Threading.Timer(delegate { ReleaseAlt(); }, null, AltHoldMs, System.Threading.Timeout.Infinite);
+            else altTimer.Change(AltHoldMs, System.Threading.Timeout.Infinite);
+        }
+
+        public static void ReleaseAlt()
+        {
+            lock (altLock) { if (altHeld) { Key(0x12, 0, KEYUP); altHeld = false; } }
+        }
+
+        static void AltTab(ushort[] vks)
+        {
+            lock (altLock)
+            {
+                if (!altHeld) { Key(0x12, 0, 0); altHeld = true; }
+                bool shift = Array.IndexOf(vks, (ushort)0x10) >= 0;
+                if (shift) Key(0x10, 0, 0);
+                Key(0x09, 0, 0); Key(0x09, 0, KEYUP);
+                if (shift) Key(0x10, 0, KEYUP);
+                ArmAlt();
+            }
+        }
+
         // a key command such as Ctrl+C: all keys down in order, then up in reverse order
         public static void PressCombo(ushort[] vks)
         {
+            if (Array.IndexOf(vks, (ushort)0x12) >= 0 && Array.IndexOf(vks, (ushort)0x09) >= 0) { AltTab(vks); return; }
+            lock (altLock) { if (altHeld) ArmAlt(); }   // another key while the switcher is open: keep Alt held a little longer
             foreach (ushort v in vks) Key(v, 0, IsExt(v) ? EXTENDED : 0);
             for (int i = vks.Length - 1; i >= 0; i--) Key(vks[i], 0, (IsExt(vks[i]) ? EXTENDED : 0) | KEYUP);
         }
@@ -2698,12 +2732,21 @@ public override void Update(State s)
             Window w = (Window)XamlReader.Parse(Th.Fill(Xaml.Dialog));
             if (owner != null && owner.IsVisible) w.Owner = owner; else w.WindowStartupLocation = WindowStartupLocation.CenterScreen;
             TextBlock msg = (TextBlock)w.FindName("txtMsg");
-            msg.Text = "Press the keys for this button.\nEsc cancels.";
+            msg.Text = "Press the keys for this button.\nEsc cancels. Windows keeps some combinations for itself (Alt+Tab ...): pick those below.";
+            string result = null;
+            WrapPanel presets = new WrapPanel { Margin = new Thickness(0, 0, 0, 18) };
+            foreach (string pc in new string[] { "Alt+Tab", "Alt+Shift+Tab", "Win+Tab", "Win+D", "Alt+F4", "Win+E" })
+            {
+                string pick = pc;
+                Button pb = new Button { Content = pc, Style = (Style)w.FindResource("Glass"), Padding = new Thickness(14, 6, 14, 6), FontSize = 12, Margin = new Thickness(0, 0, 8, 8) };
+                pb.Click += delegate { result = pick; w.Close(); };
+                presets.Children.Add(pb);
+            }
+            ((Panel)msg.Parent).Children.Insert(1, presets);
             ((Button)w.FindName("btnYes")).Visibility = Visibility.Collapsed;
             Button cancel = (Button)w.FindName("btnNo");
             cancel.Content = "Cancel";
             cancel.Click += delegate { w.Close(); };
-            string result = null;
             w.PreviewKeyDown += delegate (object s, System.Windows.Input.KeyEventArgs e)
             {
                 e.Handled = true;
@@ -3556,7 +3599,7 @@ public override void Update(State s)
 
     static class AppInfo
     {
-        public const string Version = "2.5.0";   // shown next to the name in the header; bump it with every release
+        public const string Version = "2.5.1";   // shown next to the name in the header; bump it with every release
     }
 
     sealed class StickView
@@ -5204,6 +5247,7 @@ public override void Update(State s)
         {
             if (args.Length > 0 && args[0] == "--selftest") { SelfTest(); return; }
             if (args.Length > 1 && args[0] == "--pad-shot") { PadPanel.Shot(args[1]); return; }
+            if (args.Length > 1 && args[0] == "--press") { Native.PressCombo(Osk.ComboVks(args[1])); Thread.Sleep(5500); Native.ReleaseAlt(); return; }   // developer check of a key command
             if (args.Length > 1 && args[0] == "--export-art") { int st = 0; if (args.Length > 2) int.TryParse(args[2], out st); PadArt.Export(args[1], st); return; }
             bool created;
             bool chiakiStart = args.Length > 0 && args[0] == "--chiaki";   // the desktop shortcut of chiaki-ng
