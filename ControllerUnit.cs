@@ -3499,6 +3499,23 @@ public override void Update(State s)
 
         static bool Configured { get { return !Repo.StartsWith("OWNER/"); } }
 
+        // when the program was installed by Controller-Setup.exe, keep the version shown in Windows "Installed apps" up to date
+        // (an in-program update replaces the file without running the installer)
+        public static void SyncInstallVersion()
+        {
+            try
+            {
+                using (Microsoft.Win32.RegistryKey k = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Uninstall\Controller", true))
+                {
+                    if (k == null) return;
+                    object loc = k.GetValue("InstallLocation");
+                    if (loc == null || !string.Equals(loc.ToString().TrimEnd('\\'), Settings.Dir.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase)) return;
+                    if ((k.GetValue("DisplayVersion") ?? "").ToString() != AppInfo.Version) k.SetValue("DisplayVersion", AppInfo.Version);
+                }
+            }
+            catch (Exception) { }
+        }
+
         // developer check: AL-SeRry.exe --update-demo shows the update icon as if v9.9.9 had been released (nothing can be installed)
         public static void Demo() { LatestVersion = "9.9.9"; }
 
@@ -3599,7 +3616,7 @@ public override void Update(State s)
 
     static class AppInfo
     {
-        public const string Version = "2.5.1";   // shown next to the name in the header; bump it with every release
+        public const string Version = "2.6.0";   // shown next to the name in the header; bump it with every release
     }
 
     sealed class StickView
@@ -5274,6 +5291,7 @@ public override void Update(State s)
                     try { if (!m.WaitOne(15000)) return; }
                     catch (AbandonedMutexException) { }   // the old copy ended without releasing it: we own it now
                 }
+                Updater.SyncInstallVersion();
                 Engine eng = new Engine();
                 eng.Start();
                 Application app = new Application();

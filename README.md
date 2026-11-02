@@ -23,23 +23,26 @@ A small native Windows tool that sits between your controller and a game (made f
 
 ## Install
 
-Download `Controller.exe` from the [latest release](../../releases/latest) and run it. Nothing else to install besides ViGEmBus. Settings are saved next to the program (`settings.ini`).
+Download **Controller-Setup.exe** from the [latest release](../../releases/latest) and run it. The installer asks where to install (default: your user folder, no administrator rights needed) and whether to create a desktop shortcut and a Start menu shortcut. Running a newer setup (or the in-program update) replaces the program in the same place, so your shortcuts and settings stay as they are. Remove it from Windows "Installed apps".
+
+Besides the [ViGEmBus](https://github.com/nefarius/ViGEmBus) driver nothing else is needed. Settings are saved in the install folder (`settings.ini`).
 
 ## Build from source
 
 The program is one C# file and the compiler that ships with Windows is enough:
 
 ```
-build.bat
+build.bat          (the program: Controller.exe)
+build_setup.bat    (the installer: Controller-Setup.exe, it carries Controller.exe)
 ```
 
-This writes `Controller.exe` next to the sources (`ControllerUnit.cs`, `app.ico`, `logo.png`, `ViGEmClient.dll`).
+Sources: `ControllerUnit.cs` (program), `Setup.cs` (installer), `app.ico`, `logo.png`, `ViGEmClient.dll`.
 
 ## Publishing an update (for the maintainer)
 
 1. Change `AppInfo.Version` in `ControllerUnit.cs`, build, and test.
 2. Create a GitHub release whose tag is the same number with a `v` in front (for example `v2.6.0`).
-3. Attach the new `Controller.exe` to the release, and optionally `Controller.exe.sha256` (the SHA-256 of the exe, so the program can check the download).
+3. Attach `Controller.exe` (used by the in-program update), `Controller.exe.sha256` (its SHA-256, so the program can check the download) and `Controller-Setup.exe` (what new users download). Also set `Version` in `Setup.cs`.
 
 Running copies check the newest release a few seconds after start and every six hours.
 
